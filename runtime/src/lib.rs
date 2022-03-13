@@ -265,12 +265,10 @@ impl pallet_sudo::Config for Runtime {
 	type Event = Event;
 	type Call = Call;
 }
-
-parameter_types! {              // <- add this macro
-	// One can own at most 9,999 Kitties
-	pub const MaxKittyOwned: u32 = 9999;
+/// Configure pallet-kitties in pallets/kitties.
+parameter_types! {
+	pub const MaxKittyOwned: u32 = 50;
 }
-
 /// Configure the pallet-kitties in pallets/kitties.
 impl pallet_kitties::Config for Runtime {
 	type Event = Event;
@@ -338,7 +336,7 @@ mod benches {
 		[frame_system, SystemBench::<Runtime>]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_template, TemplateModule]
+		[pallet_template, SubstrateKitties]
 	);
 }
 

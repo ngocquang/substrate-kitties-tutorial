@@ -30,9 +30,10 @@ pub mod pallet {
 		pub price: Option<BalanceOf<T>>,
 		pub gender: Gender,
 		pub owner: AccountOf<T>,
+		pub created_time: <T as pallet_timestamp::Config>::Moment,
 	}
 
-	// Set Gender type in Kitty struct.
+	// Enum declaration for Gender.
 	#[derive(Clone, Encode, Decode, PartialEq, RuntimeDebug, TypeInfo, MaxEncodedLen)]
 	#[cfg_attr(feature = "std", derive(Serialize, Deserialize))]
 	pub enum Gender {
@@ -44,9 +45,9 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// Configure the pallet by specifying the parameters and types on which it depends.
+	/// Configure the pallet by specifying the parameters and types it depends on.
 	#[pallet::config]
-	pub trait Config: frame_system::Config {
+	pub trait Config: frame_system::Config + pallet_timestamp::Config {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 
@@ -64,7 +65,7 @@ pub mod pallet {
 	// Errors.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Handles arithemtic overflow when incrementing the Kitty counter.
+		/// Handles arithmetic overflow when incrementing the Kitty counter.
 		KittyCntOverflow,
 		/// An account cannot own more Kitties than `MaxKittyCount`.
 		ExceedMaxKittyOwned,
@@ -82,7 +83,6 @@ pub mod pallet {
 		KittyBidPriceTooLow,
 		/// Ensures that an account has enough funds to purchase a Kitty.
 		NotEnoughBalance,
-		KittyExists,
 	}
 
 	// Events.
@@ -122,29 +122,12 @@ pub mod pallet {
 		ValueQuery,
 	>;
 
-	// Our pallet's genesis configuration.
-	#[pallet::genesis_config]
-	pub struct GenesisConfig<T: Config> {
-		pub kitties: Vec<(T::AccountId, [u8; 16], Gender)>,
-	}
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {}
 
-	// Required to implement default for GenesisConfig.
-	#[cfg(feature = "std")]
-	impl<T: Config> Default for GenesisConfig<T> {
-		fn default() -> GenesisConfig<T> {
-			GenesisConfig { kitties: vec![] }
-		}
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> GenesisBuild<T> for GenesisConfig<T> {
-		fn build(&self) {
-			// When building a kitty from genesis config, we require the dna and gender to be supplied.
-			for (acct, dna, gender) in &self.kitties {
-				let _ = <Pallet<T>>::mint(acct, Some(dna.clone()), Some(gender.clone()));
-			}
-		}
-	}
+	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
+	// These functions materialize as "extrinsics", which are often compared to transactions.
+	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
@@ -154,9 +137,12 @@ pub mod pallet {
 		#[pallet::weight(100)]
 		pub fn create_kitty(origin: OriginFor<T>) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
+			let created_time = pallet_timestamp::Pallet::<T>::now();
+			let kitty_id = Self::mint(&sender, None, None, &created_time)?;
 
-			let kitty_id = Self::mint(&sender, None, None)?;
+			// Logging to the console
 			log::info!("A kitty is born with ID: {:?}.", kitty_id);
+			// Deposit our "Created" event.
 			Self::deposit_event(Event::Created(sender, kitty_id));
 			Ok(())
 		}
@@ -172,6 +158,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 
+			// Ensure the kitty exists and is called by the kitty owner
 			ensure!(Self::is_kitty_owner(&kitty_id, &sender)?, <Error<T>>::NotKittyOwner);
 
 			let mut kitty = Self::kitties(&kitty_id).ok_or(<Error<T>>::KittyNotExist)?;
@@ -185,6 +172,10 @@ pub mod pallet {
 			Ok(())
 		}
 
+		/// Directly transfer a kitty to another recipient.
+		///
+		/// Any account that holds a kitty can send it to another Account. This will reset the asking
+		/// price of the kitty, marking it not for sale.
 		#[pallet::weight(100)]
 		pub fn transfer(
 			origin: OriginFor<T>,
@@ -213,7 +204,11 @@ pub mod pallet {
 			Ok(())
 		}
 
-		// buy_kitty
+		/// Buy a saleable Kitty. The bid price provided from the buyer has to be equal or higher
+		/// than the ask price from the seller.
+		///
+		/// This will reset the asking price of the kitty, marking it not for sale.
+		/// Marking this method `transactional` so when an error is returned, we ensure no storage is changed.
 		#[transactional]
 		#[pallet::weight(100)]
 		pub fn buy_kitty(
@@ -252,7 +247,6 @@ pub mod pallet {
 			// Transfer the kitty from seller to buyer
 			Self::transfer_kitty_to(&kitty_id, &buyer)?;
 
-			// Deposit relevant Event
 			Self::deposit_event(Event::Bought(buyer, seller, kitty_id, bid_price));
 
 			Ok(())
@@ -275,8 +269,9 @@ pub mod pallet {
 			ensure!(Self::is_kitty_owner(&parent2, &sender)?, <Error<T>>::NotKittyOwner);
 
 			let new_dna = Self::breed_dna(&parent1, &parent2)?;
+			let created_time = pallet_timestamp::Pallet::<T>::now();
 
-			Self::mint(&sender, Some(new_dna), None)?;
+			Self::mint(&sender, Some(new_dna), None, &created_time)?;
 
 			Ok(())
 		}
@@ -296,7 +291,6 @@ pub mod pallet {
 		fn gen_dna() -> [u8; 16] {
 			let payload = (
 				T::KittyRandomness::random(&b"dna"[..]).0,
-				<frame_system::Pallet<T>>::extrinsic_index().unwrap_or_default(),
 				<frame_system::Pallet<T>>::block_number(),
 			);
 			payload.using_encoded(blake2_128)
@@ -318,21 +312,20 @@ pub mod pallet {
 			owner: &T::AccountId,
 			dna: Option<[u8; 16]>,
 			gender: Option<Gender>,
+			created_time: &T::Moment,
 		) -> Result<T::Hash, Error<T>> {
 			let kitty = Kitty::<T> {
 				dna: dna.unwrap_or_else(Self::gen_dna),
 				price: None,
 				gender: gender.unwrap_or_else(Self::gen_gender),
 				owner: owner.clone(),
+				created_time: created_time.clone(),
 			};
 
 			let kitty_id = T::Hashing::hash_of(&kitty);
 
 			// Performs this operation first as it may fail
 			let new_cnt = Self::kitty_cnt().checked_add(1).ok_or(<Error<T>>::KittyCntOverflow)?;
-
-			// Check if the kitty does not already exist in our storage map
-			ensure!(Self::kitties(&kitty_id) == None, <Error<T>>::KittyExists);
 
 			// Performs this operation first because as it may fail
 			<KittiesOwned<T>>::try_mutate(&owner, |kitty_vec| kitty_vec.try_push(kitty_id))
