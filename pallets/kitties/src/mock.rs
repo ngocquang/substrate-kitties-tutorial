@@ -1,4 +1,6 @@
 use crate as pallet_kitties;
+use frame_support::parameter_types;
+use frame_support::traits::{ConstU128, ConstU16, ConstU32, ConstU64};
 use frame_system as system;
 use sp_core::H256;
 use sp_runtime::{
@@ -17,7 +19,10 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		SubstrateKitties: pallet_kitties::{Pallet, Call, Storage, Event<T>},
+		KittiesModule: pallet_kitties::{Pallet, Call, Storage, Event<T>},
+		Timestamp: pallet_timestamp::{Pallet, Call, Storage},
+		Balances: pallet_balances::{Pallet, Call, Storage, Event<T>, Config<T>},
+		RandomnessCollectiveFlip: pallet_randomness_collective_flip::{Pallet},
 	}
 );
 
@@ -39,7 +44,7 @@ impl system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -48,11 +53,56 @@ impl system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+impl pallet_timestamp::Config for Test {
+	/// A timestamp: milliseconds since the unix epoch.
+	type Moment = u64;
+	type OnTimestampSet = ();
+	type MinimumPeriod = ();
+	type WeightInfo = ();
+}
+
+impl pallet_balances::Config for Test {
+	type MaxLocks = ConstU32<50>;
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	/// The type for recording an account's balance.
+	type Balance = u128;
+	/// The ubiquitous event type.
+	type Event = Event;
+	type DustRemoval = ();
+	type ExistentialDeposit = ConstU128<500>;
+	type AccountStore = System;
+	type WeightInfo = ();
+}
+impl pallet_randomness_collective_flip::Config for Test {}
+
+parameter_types! {
+	pub const MaxKittyOwned: u32 = 10;
+}
 impl pallet_kitties::Config for Test {
 	type Event = Event;
+	type Currency = Balances;
+	type KittyRandomness = RandomnessCollectiveFlip;
+	type MaxKittyOwned = MaxKittyOwned;
 }
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	let mut t = system::GenesisConfig::default().build_storage::<Test>().unwrap();
+	pallet_balances::GenesisConfig::<Test> {
+		balances: vec![
+			(1, 1_000_000_000_000),
+			(2, 1_000_000_000_000),
+			(3, 1_000_000_000_000),
+			(4, 1_000_000_000_000),
+			(5, 1_000_000_000_000),
+			(6, 1_000_000_000_000),
+		],
+	}
+	.assimilate_storage(&mut t)
+	.unwrap();
+
+	let mut ext = sp_io::TestExternalities::new(t);
+	ext.execute_with(|| System::set_block_number(1));
+	ext
 }
