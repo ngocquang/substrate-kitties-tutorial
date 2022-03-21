@@ -293,7 +293,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
-		SubstrateKitties: pallet_kitties,
+		KittiesModule: pallet_kitties,
 	}
 );
 
@@ -336,7 +336,7 @@ mod benches {
 		[frame_system, SystemBench::<Runtime>]
 		[pallet_balances, Balances]
 		[pallet_timestamp, Timestamp]
-		[pallet_template, SubstrateKitties]
+		[pallet_kitties, KittiesModule]
 	);
 }
 
@@ -516,7 +516,7 @@ impl_runtime_apis! {
 
 			let mut batches = Vec::<BenchmarkBatch>::new();
 			let params = (&config, &whitelist);
-			add_benchmarks!(params, batches);
+			add_benchmarks!(params, batches); // , pallet_kitties, KittiesModule
 
 			Ok(batches)
 		}

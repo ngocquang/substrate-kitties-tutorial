@@ -19,7 +19,7 @@ pub mod pallet {
 	};
 	use frame_system::pallet_prelude::*;
 	use scale_info::TypeInfo;
-	// use sp_io::hashing::blake2_128;
+	use sp_io::hashing::blake2_128;
 
 	#[cfg(feature = "std")]
 	use frame_support::serde::{Deserialize, Serialize};

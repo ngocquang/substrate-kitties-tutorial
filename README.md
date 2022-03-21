@@ -44,7 +44,7 @@ Once the project has been built, the following command can be used to explore al
 subcommands:
 
 ```sh
-./target/release/node-template -h
+./target/release/node-kitties -h
 ```
 
 ## Run
@@ -58,17 +58,51 @@ node.
 This command will start the single-node development chain with non-persistent state:
 
 ```bash
-./target/release/node-template --dev
+./target/release/node-kitties --dev
 ```
 
 Purge the development chain's state:
 
 ```bash
-./target/release/node-template purge-chain --dev
+./target/release/node-kitties purge-chain --dev
 ```
 
 Start the development chain with detailed logging:
 
 ```bash
-RUST_BACKTRACE=1 ./target/release/node-template -ldebug --dev
+RUST_BACKTRACE=1 ./target/release/node-kitties -ldebug --dev
+```
+
+Test
+
+```bash
+cargo test
+cargo test -p <pallet name>
+cargo test -p <pallet name> tests::<unit test name> -- --exact
+```
+
+Debug
+
+```bash
+RUST_LOG=runtime=debug ./target/release/node-kitties --dev
+```
+
+Cac buoc Benchmark
+
+1. Su dung macro benchmark! de test warst case
+2. Enable features runtime-banchmark trong cargo.toml cua runtime
+3. add_benchmark!
+4. cargo build --release --features runtime-benchmarks
+
+```bash
+./target/release/node-kitties benchmark \
+    --chain dev \
+    --execution wasm \
+    --wasm-execution compiled \
+    --pallet pallet_kitties \
+    --extrinsic '*' \
+    --steps 20 \
+    --repeat 10 \
+    --json-file=raw.json \
+    --output ./pallets/kitties/src/weights.rs
 ```
